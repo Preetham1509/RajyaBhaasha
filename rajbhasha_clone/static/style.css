@@ -1,0 +1,14 @@
+.carousel-img{
+  height: 380px;      /* you can change to 400/450 */
+  object-fit: cover;  /* crops nicely */
+}
+.goog-te-banner-frame.skiptranslate,
+.goog-te-gadget-icon,
+.goog-logo-link,
+.goog-te-gadget {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
