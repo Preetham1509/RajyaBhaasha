@@ -3,11 +3,81 @@
 {% block title %}NIC TG - Employees Form{% endblock %}
 
 {% block content %}
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_table }}
-  <button type="submit" class="btn btn-primary">Send</button>
-</form>
 
-<h5 class="mt-3"><a href="http://127.0.0.1:8000">घर वापस</a></h5>
+<div class="container mt-4">
+
+  <h3 class="mb-3">Employee Form</h3>
+
+  <!-- Employee Form -->
+  <form id="employeeForm">
+    {% csrf_token %}
+
+    <table class="table table-borderless">
+      {{ form.as_table }}
+    </table>
+
+    <button type="submit" class="btn btn-primary">Send</button>
+  </form>
+
+  <h5 class="mt-4">
+    <a href="http://127.0.0.1:8000">घर वापस</a>
+  </h5>
+
+</div>
+
+<!-- ================= JS SECTION ================= -->
+<script>
+document.getElementById("employeeForm").addEventListener("submit", function (e) {
+    e.preventDefault(); // stop normal Django submit
+
+    const form = e.target;
+    const formData = new FormData(form);
+
+    let jsonData = {};
+    formData.forEach((value, key) => {
+        jsonData[key] = value;
+    });
+
+    fetch("/api/employees/", {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken")
+    },
+    body: JSON.stringify(jsonData)
+    })
+    .then(async response => {
+        const data = await response.json();
+        if (!response.ok) {
+            console.error("API Error:", data);
+            alert("Error: " + JSON.stringify(data));
+            return;
+        }
+        alert("✅ Employee added successfully!");
+        form.reset();
+    })
+    .catch(error => {
+        console.error("Fetch error:", error);
+        alert("Network / JS error");
+    });
+
+});
+
+// -------- CSRF Helper (Required for Django) --------
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            cookie = cookie.trim();
+            if (cookie.startsWith(name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+
 {% endblock %}
