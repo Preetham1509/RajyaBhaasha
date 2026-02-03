@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load translate_tags %}
+
+{% block title %}{{ "Manager Dashboard"|t:current_lang }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-11">
+        <div class="card shadow-sm border-0 p-4 mb-4">
+            <h1 class="fw-bold mb-4">{{ "Manager Dashboard"|t:current_lang }}</h1>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ "Username"|t:current_lang }}</th>
+                            <th>{{ "Role"|t:current_lang }}</th>
+                            <th>{{ "Status"|t:current_lang }}</th>
+                            <th>{{ "Actions"|t:current_lang }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        <tr>
+                            <td>{{ u.username }}</td>
+                            <td>{{ u.role|title }}</td>
+                            <td>
+                                {% if u.is_archived %}
+                                <span class="badge bg-secondary">{{ "Archived"|t:current_lang }}</span>
+                                {% elif u.is_frozen %}
+                                <span class="badge bg-info text-white">{{ "Frozen"|t:current_lang }}</span>
+                                {% if u.is_edit_allowed %}
+                                <span class="badge bg-success">{{ "Edit Allowed"|t:current_lang }}</span>
+                                {% endif %}
+                                {% else %}
+                                <span class="badge bg-success">{{ "Active"|t:current_lang }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                {% if u.is_frozen and not u.is_edit_allowed %}
+                                <a href="{% url 'manage_user_action' u.id 'approve' %}" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-check-circle"></i> {{ "Approve Edit"|t:current_lang }}
+                                </a>
+                                {% endif %}
+
+                                {% if not u.is_archived %}
+                                <a href="{% url 'manage_user_action' u.id 'archive' %}" class="btn btn-sm btn-outline-danger"onclick="return confirm('{{ "Archive this user?"|t:current_lang }}')">
+                                    {{ "Archive"|t:current_lang }}
+                                </a>
+                                {% else %}
+                                    <a href="{% url 'manage_user_action' u.id 'unarchive' %}" class="btn btn-sm btn-outline-secondary">
+                                        {{ "Restore"|t:current_lang }}
+                                    </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4">
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary">{{ "Back to Dashboard"|t:current_lang }}</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
