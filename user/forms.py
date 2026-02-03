@@ -101,7 +101,7 @@ class CustomUserCreationForm(UserCreationForm):
 
 class CustomLoginForm(AuthenticationForm):
     role = forms.ChoiceField(
-        choices=[('user', 'User'), ('manager', 'Manager'), ('admin', 'Admin')],
+        choices=[('user', 'User'), ('manager', 'Manager'), ('admin', 'Admin'),('backup_user','Backup User')],
         widget=forms.Select(attrs={'class': 'form-select'})
     )
     captcha = CaptchaField()
@@ -133,11 +133,10 @@ class CustomLoginForm(AuthenticationForm):
             ('user', translate_text("User", self.lang)),
             ('manager', translate_text("Manager", self.lang)),
             ('admin', translate_text("Admin", self.lang)),
+            ('backup_user', translate_text("Backup User", self.lang)),
         ]
 
-        # Apply placeholders via loop for cleaner code
         for field_name in ['username', 'password', 'role']:
             self.fields[field_name].help_text = ""
-            # Ensure the placeholder matches the translated label
             self.fields[field_name].widget.attrs['placeholder'] = self.fields[field_name].label
 

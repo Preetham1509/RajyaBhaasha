@@ -35,9 +35,6 @@
     {% bootstrap_field form.role %}
     <div class="mb-3">
     {% bootstrap_field form.captcha %}
-    <a href="{% url 'captcha-audio' form.captcha.id %}" class="btn btn-sm btn-outline-info mt-2">
-        <i class="bi bi-volume-up"></i> {{ "Listen to CAPTCHA"|t:current_lang }}
-    </a>
 </div>
 
     <button type="submit" class="btn btn-primary w-100 mb-3 shadow-sm">
@@ -97,5 +94,33 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.reload();
         }
     }
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshBtn = document.querySelector('.js-captcha-refresh');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function(e) {
+            e.preventDefault(); 
+            
+            fetch('/captcha/refresh/', {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(response => response.json())
+            .then(data => {
+                const img = document.querySelector('img.captcha');
+                if (img) img.src = data.image_url;
+
+                const hiddenField = document.querySelector('input[name$="_0"]');
+                if (hiddenField) hiddenField.value = data.key;
+
+                const audioBtn = document.querySelector('.captcha-audio-btn');
+                if (audioBtn) {
+                    audioBtn.href = `/captcha/audio/${data.key}.wav`;
+                }
+            })
+            .catch(error => console.error('Error refreshing captcha:', error));
+        });
+    }
+});
 </script>
 {% endblock %}

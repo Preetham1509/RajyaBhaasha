@@ -137,4 +137,13 @@ CAPTCHA_CHALLENGE_FUNCT = 'captcha.helpers.random_char_challenge'
 CAPTCHA_IMAGE_SIZE = (150, 50)
 CAPTCHA_FONT_SIZE = 30
 CAPTCHA_LENGTH = 6
-CAPTCHA_FLITE_PATH = '/usr/local/bin/flite'
+CAPTCHA_OUTPUT_FORMAT = (
+    '<img src="%(image_url)s" alt="captcha" class="captcha" /> '
+    '<a href="%(audio_url)s" class="captcha-audio-btn text-info ms-2">'
+    '<i class="bi bi-volume-up-fill" style="font-size: 1.5rem;"></i>'
+    '</a> '
+    '<button type="button" class="js-captcha-refresh btn btn-sm btn-outline-secondary ms-2">'
+    '<i class="bi bi-arrow-clockwise"></i>'
+    '</button>'
+    '<br>%(hidden_field)s %(text_field)s'
+)

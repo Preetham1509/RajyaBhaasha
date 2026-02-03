@@ -1,3 +1,4 @@
+import os  
 import io
 import csv
 import random
@@ -19,7 +20,12 @@ from .models import CustomUser, DataAccessLog, ArchivedUser
 from .forms import CustomLoginForm, CustomUserCreationForm
 from .templatetags.translate_tags import translate_text
 from .utils import send_system_email
-
+from django.http import FileResponse
+from django.conf import settings
+from django.contrib.auth.decorators import user_passes_test
+from gtts import gTTS
+from captcha.models import CaptchaStore
+from django.http import HttpResponse, Http404
 User = get_user_model()
 
 def home(request): 
@@ -379,3 +385,50 @@ def archive_user_action(user_id):
     )
     # 2. Delete the active user
     user.delete()
+
+
+@user_passes_test(lambda u: u.role == 'backup_user', login_url='login')
+def download_db_backup(request):
+    # Securely serve the SQLite database file
+    db_path = settings.DATABASES['default']['NAME']
+    
+    # Now 'os' will be defined and this check will work
+    if os.path.exists(db_path):
+        return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='backup_RajyaBhasha.sqlite3')
+    
+    messages.error(request, "Database file not found.")
+    return redirect('dashboard')
+
+
+
+def unarchive_user_action(archived_id):
+    archived = get_object_or_404(ArchivedUser, id=archived_id)
+    user = CustomUser.objects.create(
+        username=archived.username,
+        email_hash=archived.email_hash,
+        encrypted_email_data=archived.encrypted_email_data,
+        is_archived=False,
+        role='user' 
+    )    
+    archived.delete()
+
+
+def custom_captcha_audio(request, key):
+    # 1. Retrieve the text for this captcha hashkey
+    try:
+        captcha = CaptchaStore.objects.get(hashkey=key)
+    except CaptchaStore.DoesNotExist:
+        raise Http404("Captcha not found")
+
+    # 2. Format the text for clear speech (e.g., 'A1B2' becomes 'A 1 B 2')
+    spaced_text = " ".join(list(captcha.response))
+    
+    # 3. Generate Audio via gTTS library
+    tts = gTTS(text=spaced_text, lang='en')
+    
+    # Save to a buffer and stream it back
+    mp3_fp = io.BytesIO()
+    tts.write_to_fp(mp3_fp)
+    mp3_fp.seek(0)
+    
+    return HttpResponse(mp3_fp.read(), content_type="audio/mpeg")

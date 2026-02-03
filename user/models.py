@@ -34,7 +34,7 @@ class CustomUser(AbstractUser):
     email_hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
     encrypted_email_data = models.BinaryField(null=True, blank=True)
     email = models.EmailField(unique=False, null=True, blank=True)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='user')
     otp = models.CharField(max_length=6, blank=True, null=True)
     otp_created_at = models.DateTimeField(blank=True, null=True)
     consent_given_at = models.DateTimeField(null=True, blank=True)

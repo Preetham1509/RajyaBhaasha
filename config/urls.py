@@ -50,5 +50,8 @@ urlpatterns = [
     path('request-edit/', views.request_edit, name='request_edit'),
     path('manager-dashboard/', views.manager_dashboard, name='manager_dashboard'),
     path('action/<int:user_id>/<str:action>/', views.manage_user_action, name='manage_user_action'),
+    path('captcha/audio/<key>.wav', views.custom_captcha_audio, name='captcha-audio'),
+    
     path('captcha/', include('captcha.urls')),
+    path('download-backup/', views.download_db_backup, name='download_db_backup'),
 ]

@@ -19,8 +19,7 @@ def send_system_email(user, request, email_type, extra_context=None):
         lang = request.session.get('lang', 'en')
     else:
         lang = extra_context.get('lang', 'en')
-    body_en = cfg.get('body') 
-    body_hi = translate_text(body_en, 'hi')
+    
     domain = request.build_absolute_uri('/')[:-1] if request else ''
     raw_role = request.session.get('active_role', 'user').title() if request else 'User'
     translated_role = translate_text(raw_role, lang)
@@ -87,10 +86,10 @@ def send_system_email(user, request, email_type, extra_context=None):
     'is_alert': True
 }
     }
-
     cfg = configs.get(email_type)
     if not cfg: return
-
+    body_en = cfg.get('body') 
+    body_hi = translate_text(body_en, 'hi')
     context = {
         'username': user.username,
         'body_en': body_en,
@@ -103,7 +102,7 @@ def send_system_email(user, request, email_type, extra_context=None):
         'action_url': cfg.get('action_url'),
         'is_alert': cfg.get('is_alert', False),
     }
-
+    
     subject = translate_text(cfg['subject'], lang)
     html_msg = render_to_string('email/unified_email.html', context)
     html_msg = render_to_string('email/login_notification_dual.html', context)
