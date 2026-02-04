@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractUser
 from cryptography.fernet import Fernet
 from django.conf import settings
 import hashlib
+import json
 from django.contrib.auth.models import BaseUserManager
 
 cipher_suite = Fernet(settings.ENCRYPTION_KEY)
@@ -74,13 +75,14 @@ class ArchivedUser(models.Model):
     username = models.CharField(max_length=150)
     email_hash = models.CharField(max_length=64)
     encrypted_email_data = models.BinaryField()
+    employee_snapshot = models.TextField(null=True, blank=True) 
     archived_at = models.DateTimeField(auto_now_add=True)
     original_user_id = models.IntegerField()
 
 
 class Employee(models.Model):
     empcode = models.IntegerField(unique=True)
-    ename = models.CharField(max_length=255)
+    encrypted_ename = models.BinaryField(null=True, blank=True) 
     hname = models.CharField(max_length=255)
 
     designation = models.CharField(max_length=100)
@@ -130,3 +132,15 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.empcode} - {self.ename}"
+    
+
+    def set_ename(self, name_str):
+        """Encrypts the English name before saving."""
+        self.encrypted_ename = cipher_suite.encrypt(name_str.encode())
+        self.ename = "" # Keep the original CharField empty for compliance
+
+    def get_ename(self):
+        """Decrypts the English name for display."""
+        if self.encrypted_ename:
+            return cipher_suite.decrypt(self.encrypted_ename).decode()
+        return None

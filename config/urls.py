@@ -22,7 +22,6 @@ from django.contrib.auth.views import LogoutView
 from user import views
 from user.views import (CustomLoginView, signup, ForgotPasswordView, VerifyOTPView, ResetPasswordView, home,
     employee_form,
-    translate_api,
     EmployeeListCreateAPI,
     EmployeeDetailAPI,
     SubmitDraftAPI,)
@@ -62,7 +61,7 @@ urlpatterns = [
     path("dashboard/", views.dashboard, name="dashboard"),
     path("employee-form/", views.employee_form, name="employee_form"),
 
-    path("api/translate/", translate_api, name="translate_api"),
+    #path("api/translate/", translate_api, name="translate_api"),
     path("api/employees/", EmployeeListCreateAPI.as_view(), name="employee_list_create"),
     path("api/employees/<int:pk>/", EmployeeDetailAPI.as_view(), name="employee_detail"),
     path("api/employees/submit/", SubmitDraftAPI.as_view(), name="submit_drafts"),

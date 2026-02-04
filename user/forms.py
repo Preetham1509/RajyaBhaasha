@@ -136,7 +136,14 @@ class CustomLoginForm(AuthenticationForm):
             ('backup_user', translate_text("Backup User", self.lang)),
         ]
 
-        for field_name in ['username', 'password', 'role']:
-            self.fields[field_name].help_text = ""
-            self.fields[field_name].widget.attrs['placeholder'] = self.fields[field_name].label
+        for field_name, field in self.fields.items():
+            field.help_text = ""
+            # Ensure bootstrap classes are applied to all
+            if field_name == 'role':
+                field.widget.attrs.update({'class': 'form-select'})
+            else:
+                field.widget.attrs.update({'class': 'form-control'})
+            
+            # Apply translated labels as placeholders
+            field.widget.attrs['placeholder'] = field.label
 

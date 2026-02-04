@@ -25,12 +25,13 @@ from reportlab.lib.pagesizes import letter
 from gtts import gTTS
 from captcha.models import CaptchaStore
 from deep_translator import GoogleTranslator
-from .models import Employee, CustomUser, DataAccessLog, ArchivedUser
+from .models import Employee, CustomUser, DataAccessLog, ArchivedUser, cipher_suite
 from .forms import CustomLoginForm, CustomUserCreationForm
 from .employeeform import EmployeeForm
 from .serializers import EmployeeSerializer
 from .utils import send_system_email
 from .templatetags.translate_tags import translate_text
+
 
 
 User = get_user_model()
@@ -112,6 +113,9 @@ def delete_account(request):
 class CustomLoginView(LoginView):
     authentication_form = CustomLoginForm
     template_name = 'registration/login.html'
+
+    def get_success_url(self):
+        return reverse('dashboard')
 
     def form_valid(self, form):
         current_lang = self.request.session.get('lang', 'en')
@@ -387,28 +391,59 @@ pass
 
 def archive_user_action(user_id):
     user = get_object_or_404(CustomUser, id=user_id)
-    # 1. Create the archive record
+    employee = Employee.objects.filter(empcode=user.username).first()
+    
+    snapshot = {}
+    if employee:
+        # Get decrypted name if you implemented the encryption method in models
+        ename_decrypted = employee.get_ename() if hasattr(employee, 'get_ename') else employee.ename
+        
+        snapshot = {
+            "designation": employee.designation,
+            "status": employee.status,
+            "last_updated": str(employee.lastupdate),
+            # Encrypt the name again for the archive specifically
+            "encrypted_name": cipher_suite.encrypt(ename_decrypted.encode()).hex() 
+        }
+
     ArchivedUser.objects.create(
         username=user.username,
         email_hash=user.email_hash,
         encrypted_email_data=user.encrypted_email_data,
-        original_user_id=user.id
+        original_user_id=user.id,
+        employee_snapshot=json.dumps(snapshot) 
     )
-    # 2. Delete the active user
+    
+    if employee:
+        employee.delete() 
     user.delete()
 
 
-@user_passes_test(lambda u: u.role == 'backup_user', login_url='login')
-def download_db_backup(request):
-    # Securely serve the SQLite database file
-    db_path = settings.DATABASES['default']['NAME']
+@user_passes_test(lambda u: u.is_superuser)
+def download_privacy_audit(request):
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
     
-    # Now 'os' will be defined and this check will work
-    if os.path.exists(db_path):
-        return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='backup_RajyaBhasha.sqlite3')
+    # Add Header
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, height - 50, "DPDP Privacy Audit Report")
+    p.setFont("Helvetica", 10)
+    p.drawString(50, height - 65, f"Generated on: {timezone.now().strftime('%Y-%m-%d %H:%M')}")
     
-    messages.error(request, "Database file not found.")
-    return redirect('dashboard')
+    y = height - 100
+    logs = DataAccessLog.objects.all().order_by('-access_time')
+    for log in logs:
+        line = f"{log.access_time.strftime('%Y-%m-%d %H:%M')}: {log.accessed_by.username} accessed {log.target_user.username} ({log.reason})"
+        p.drawString(50, y, line)
+        y -= 20
+        if y < 50: 
+            p.showPage()
+            y = height - 50
+
+    p.save()
+    buffer.seek(0)
+    return FileResponse(buffer, as_attachment=True, filename=f'privacy_audit_{timezone.now().date()}.pdf')
 
 
 
@@ -450,19 +485,26 @@ def employee_form(request):
     form = EmployeeForm()
     return render(request, "employeeform.html", {"form": form})
 
-@csrf_exempt
+'''@csrf_exempt
 def translate_api(request):
     if request.method == "POST":
-        data = json.loads(request.body)
-        text = data.get("text", "")
-        target = data.get("target", "hi")
-        if not text or text == "-":
-            return JsonResponse({"translated": text})
-        
-        translated = GoogleTranslator(source="auto", target=target).translate(text)
-        return JsonResponse({"translated": translated})
-    return JsonResponse({"error": "Invalid request"}, status=400)
-
+        try:
+            data = json.loads(request.body)
+            text = data.get("text", "")
+            target = data.get("target", "hi")
+            
+            if not text or text == "-":
+                return JsonResponse({"translated": text})
+            
+            # Note: GoogleTranslator requires an active internet connection
+            translated = GoogleTranslator(source="auto", target=target).translate(text)
+            return JsonResponse({"translated": translated})
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+            
+    return JsonResponse({"error": "Invalid request"}, status=400)'''
 class EmployeeListCreateAPI(APIView):
     def get(self, request):
         if request.session.get('active_role') != 'user':
@@ -517,3 +559,13 @@ class SubmitDraftAPI(APIView):
             status="submitted", lastupdate=timezone.now()
         )
         return Response({"message": f"{count} record(s) submitted"})
+
+@user_passes_test(lambda u: u.role == 'backup_user', login_url='login')
+def download_db_backup(request):
+    """Securely serve the SQLite database file."""
+    db_path = settings.DATABASES['default']['NAME']
+    if os.path.exists(db_path):
+        return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='backup_RajyaBhasha.sqlite3')
+    
+    messages.error(request, "Database file not found.")
+    return redirect('dashboard')
