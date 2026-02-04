@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'django_bootstrap5',
     'user',
     'captcha',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [

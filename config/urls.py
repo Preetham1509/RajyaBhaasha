@@ -20,7 +20,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.contrib.auth.views import LogoutView
 from user import views
-from user.views import (CustomLoginView, signup, ForgotPasswordView, VerifyOTPView, ResetPasswordView)
+from user.views import (CustomLoginView, signup, ForgotPasswordView, VerifyOTPView, ResetPasswordView, home,
+    employee_form,
+    translate_api,
+    EmployeeListCreateAPI,
+    EmployeeDetailAPI,
+    SubmitDraftAPI,)
 
 csrf_failure_view = "user.views.csrf_failure"
 handler400 = 'user.views.error_400'
@@ -51,7 +56,14 @@ urlpatterns = [
     path('manager-dashboard/', views.manager_dashboard, name='manager_dashboard'),
     path('action/<int:user_id>/<str:action>/', views.manage_user_action, name='manage_user_action'),
     path('captcha/audio/<key>.wav', views.custom_captcha_audio, name='captcha-audio'),
-    
+    path("employee-form/", employee_form, name="employee_form"),
     path('captcha/', include('captcha.urls')),
     path('download-backup/', views.download_db_backup, name='download_db_backup'),
+    path("dashboard/", views.dashboard, name="dashboard"),
+    path("employee-form/", views.employee_form, name="employee_form"),
+
+    path("api/translate/", translate_api, name="translate_api"),
+    path("api/employees/", EmployeeListCreateAPI.as_view(), name="employee_list_create"),
+    path("api/employees/<int:pk>/", EmployeeDetailAPI.as_view(), name="employee_detail"),
+    path("api/employees/submit/", SubmitDraftAPI.as_view(), name="submit_drafts"),
 ]

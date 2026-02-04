@@ -3,29 +3,36 @@ import io
 import csv
 import random
 import hashlib
+import json
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as auth_login, logout, get_user_model
 from django.contrib.auth.views import LoginView
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.core.cache import cache
 from django.utils import timezone
 from django.urls import reverse
-from django.http import HttpResponse, FileResponse
+from django.http import HttpResponse, FileResponse, Http404, JsonResponse
 from django.core.exceptions import PermissionDenied
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from .models import CustomUser, DataAccessLog, ArchivedUser
-from .forms import CustomLoginForm, CustomUserCreationForm
-from .templatetags.translate_tags import translate_text
-from .utils import send_system_email
-from django.http import FileResponse
-from django.conf import settings
-from django.contrib.auth.decorators import user_passes_test
 from gtts import gTTS
 from captcha.models import CaptchaStore
-from django.http import HttpResponse, Http404
+from deep_translator import GoogleTranslator
+from .models import Employee, CustomUser, DataAccessLog, ArchivedUser
+from .forms import CustomLoginForm, CustomUserCreationForm
+from .employeeform import EmployeeForm
+from .serializers import EmployeeSerializer
+from .utils import send_system_email
+from .templatetags.translate_tags import translate_text
+
+
 User = get_user_model()
 
 def home(request): 
@@ -49,8 +56,12 @@ def error_500(request): return universal_error_view(request, None, 500)
 
 @login_required
 def dashboard(request):
-    return render(request, 'dashboard.html')
-
+    role = request.session.get('active_role', 'user')
+    if role == 'user':
+        return render(request, "dashboard.html")
+    elif role in ['manager', 'admin']:
+        return redirect('manager_dashboard')
+    return redirect('home')
 def privacy_policy(request):
     return render(request, 'privacy_policy.html')
 
@@ -420,15 +431,89 @@ def custom_captcha_audio(request, key):
     except CaptchaStore.DoesNotExist:
         raise Http404("Captcha not found")
 
-    # 2. Format the text for clear speech (e.g., 'A1B2' becomes 'A 1 B 2')
     spaced_text = " ".join(list(captcha.response))
     
-    # 3. Generate Audio via gTTS library
     tts = gTTS(text=spaced_text, lang='en')
     
-    # Save to a buffer and stream it back
     mp3_fp = io.BytesIO()
     tts.write_to_fp(mp3_fp)
     mp3_fp.seek(0)
     
     return HttpResponse(mp3_fp.read(), content_type="audio/mpeg")
+
+
+@login_required
+def employee_form(request):
+    if request.session.get('active_role') != 'user':
+        return redirect('dashboard')
+    
+    form = EmployeeForm()
+    return render(request, "employeeform.html", {"form": form})
+
+@csrf_exempt
+def translate_api(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        text = data.get("text", "")
+        target = data.get("target", "hi")
+        if not text or text == "-":
+            return JsonResponse({"translated": text})
+        
+        translated = GoogleTranslator(source="auto", target=target).translate(text)
+        return JsonResponse({"translated": translated})
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+class EmployeeListCreateAPI(APIView):
+    def get(self, request):
+        if request.session.get('active_role') != 'user':
+            return Response({"error": "Unauthorized"}, status=403)
+            
+        status_filter = request.GET.get("status")
+        qs = Employee.objects.all().order_by("-lastupdate")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+            
+        serializer = EmployeeSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(lastupdate=timezone.now())
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class EmployeeDetailAPI(APIView):
+    def get_object(self, pk):
+        try:
+            return Employee.objects.get(pk=pk)
+        except Employee.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        emp = self.get_object(pk)
+        if not emp: return Response({"error": "Not found"}, status=404)
+        return Response(EmployeeSerializer(emp).data)
+
+    def put(self, request, pk):
+        emp = self.get_object(pk)
+        if not emp: return Response({"error": "Not found"}, status=404)
+        serializer = EmployeeSerializer(emp, data=request.data)
+        if serializer.is_valid():
+            serializer.save(lastupdate=timezone.now())
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    def delete(self, request, pk):
+        emp = self.get_object(pk)
+        if not emp: return Response({"error": "Not found"}, status=404)
+        emp.delete()
+        return Response({"message": "Deleted"})
+
+class SubmitDraftAPI(APIView):
+    def post(self, request):
+        ids = request.data.get("ids", [])
+        count = Employee.objects.filter(id__in=ids, status="draft").update(
+            status="submitted", lastupdate=timezone.now()
+        )
+        return Response({"message": f"{count} record(s) submitted"})
