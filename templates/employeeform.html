@@ -6,6 +6,8 @@
 {% block content %}
 <style>
   label { font-weight: 600; }
+  [data-bs-theme="dark"] .table { color: #fff; }
+  .custom-card { background-color: var(--bs-body-bg); }
 </style>
 
 <div class="container-fluid mt-4 mb-5 px-4">
@@ -24,10 +26,10 @@
 
   <div class="col-md-6">
     <label>{{"Empcode"|t:current_lang }}</label>
-    {{ form.empcode }}
+    {{ form.empcode}}
 
     <label class="mt-2">{{"Name in English"|t:current_lang }}</label>
-    {{ form.ename }}
+    {{ form.ename}}
 
     <label class="mt-2">{{"Name in Hindi"|t:current_lang }}</label>
     {{ form.hname }}

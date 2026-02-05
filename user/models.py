@@ -82,7 +82,8 @@ class ArchivedUser(models.Model):
 
 class Employee(models.Model):
     empcode = models.IntegerField(unique=True)
-    encrypted_ename = models.BinaryField(null=True, blank=True) 
+    
+    ename = models.CharField(null=True, blank=True) 
     hname = models.CharField(max_length=255)
 
     designation = models.CharField(max_length=100)
@@ -132,15 +133,3 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.empcode} - {self.ename}"
-    
-
-    def set_ename(self, name_str):
-        """Encrypts the English name before saving."""
-        self.encrypted_ename = cipher_suite.encrypt(name_str.encode())
-        self.ename = "" # Keep the original CharField empty for compliance
-
-    def get_ename(self):
-        """Decrypts the English name for display."""
-        if self.encrypted_ename:
-            return cipher_suite.decrypt(self.encrypted_ename).decode()
-        return None

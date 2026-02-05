@@ -1,4 +1,4 @@
-# user/utils.py
+from multiprocessing import context
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -104,10 +104,12 @@ def send_system_email(user, request, email_type, extra_context=None):
     }
     
     subject = translate_text(cfg['subject'], lang)
-    html_msg = render_to_string('email/unified_email.html', context)
-    html_msg = render_to_string('email/login_notification_dual.html', context)
+    if email_type == 'login':
+        template_name = 'email/login_notification_dual.html'
+    else:
+        template_name = 'email/unified_email.html'
+    html_msg = render_to_string(template_name, context)
     plain_msg = strip_tags(html_msg)
-
     email = EmailMultiAlternatives(subject, plain_msg, settings.EMAIL_HOST_USER, [user_email])
-    email.attach_alternative(html_msg, "text/html")
-    email.send(fail_silently=True)
+    email.attach_alternative(html_msg, "text/html")    
+    email.send(fail_silently=False)

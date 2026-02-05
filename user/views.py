@@ -4,6 +4,8 @@ import csv
 import random
 import hashlib
 import json
+from django.utils.timezone import now
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login as auth_login, logout, get_user_model
@@ -31,6 +33,23 @@ from .employeeform import EmployeeForm
 from .serializers import EmployeeSerializer
 from .utils import send_system_email
 from .templatetags.translate_tags import translate_text
+import json
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.utils import timezone
+from django.urls import reverse
+from django.http import FileResponse, JsonResponse
+from django.conf import settings
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import Employee, CustomUser, ArchivedUser
+from .forms import CustomUserCreationForm
+from .serializers import EmployeeSerializer
+from .utils import send_system_email
 
 
 
@@ -57,12 +76,24 @@ def error_500(request): return universal_error_view(request, None, 500)
 
 @login_required
 def dashboard(request):
-    role = request.session.get('active_role', 'user')
+    # Try getting role from Session -> If missing, get from Database -> Default to 'user'
+    role = request.session.get('active_role', request.user.role)
+    
+    # Refresh session if it was missing
+    if 'active_role' not in request.session:
+        request.session['active_role'] = role
+
+    # Routing Logic
     if role == 'user':
         return render(request, "dashboard.html")
     elif role in ['manager', 'admin']:
         return redirect('manager_dashboard')
+    elif role == 'backup_user':
+        # Backup users usually stay on the main dashboard to see the download link
+        return render(request, "dashboard.html")
+        
     return redirect('home')
+
 def privacy_policy(request):
     return render(request, 'privacy_policy.html')
 
@@ -118,14 +149,24 @@ class CustomLoginView(LoginView):
         return reverse('dashboard')
 
     def form_valid(self, form):
-        current_lang = self.request.session.get('lang', 'en')
-        selected_role = self.request.POST.get('role', 'user')
+        # 1. Log the user in FIRST (this prevents session flushing from wiping your data)
         user = form.get_user()
+        auth_login(self.request, user)
+        
+        # 2. Get data safely from the cleaned form (not raw POST)
+        selected_role = form.cleaned_data.get('role')
+        current_lang = self.request.session.get('lang', 'en')
+        
+        # 3. Update the User's Database Record
         user.role = selected_role
         user.save(update_fields=['role'])
+        
+        # 4. Set Session Data & Force Save
         self.request.session['lang'] = current_lang
         self.request.session['active_role'] = selected_role
-        return super().form_valid(form)
+        self.request.session.save()  
+        
+        return redirect(self.get_success_url())
     
     def form_invalid(self, form):
         username = form.data.get('username')
@@ -142,23 +183,38 @@ class CustomLoginView(LoginView):
         return kwargs
     
 def signup(request):
-    if request.user.is_authenticated: return redirect('dashboard')
+    if request.user.is_authenticated: 
+        return redirect('dashboard')
+    
     lang = request.session.get('lang', 'en')
     form = CustomUserCreationForm(request.POST or None, request=request)
     
-    if request.method == "POST" and form.is_valid():
-        user = form.save()
-        send_system_email(user, request, 'welcome')
-        
-        auth_login(request, user)
-        request.session['lang'] = lang
-        request.session['active_role'] = 'user'
-        
-        messages.success(request, translate_text("Your account was created successfully! Welcome.", lang), extra_tags='show_welcome_modal')
-        return redirect('dashboard')
+    if request.method == "POST":
+        if form.is_valid():
+            user = form.save()
+            # Send welcome email
+            send_system_email(user, request, 'welcome')
+            
+            # Login
+            auth_login(request, user)
+            
+            request.session['lang'] = lang
+            request.session['active_role'] = 'user'
+            request.session.save()
+            
+            if not Employee.objects.filter(empcode=user.username).exists():
+                Employee.objects.create(
+                    empcode=user.username,
+                    ename=user.first_name or "", # If you added ename to form
+                    status='draft'
+                )
+
+            messages.success(request, "Account created successfully!")
+            return redirect('dashboard')
+        else:
+            messages.error(request, "Please correct the errors below.")
     
     return render(request, 'registration/signup.html', {'form': form})
-
 
 def send_otp_email(user, lang):
     user.otp = str(random.randint(100000, 999999))
@@ -359,51 +415,53 @@ def request_edit(request):
 
 @user_passes_test(lambda u: u.is_authenticated and (u.role in ['manager', 'admin'] or u.is_superuser))
 def manager_dashboard(request):
-    users = CustomUser.objects.all().exclude(pk=request.user.pk)
+    # This includes archived users because they are still in the table
+    users = CustomUser.objects.all().exclude(pk=request.user.pk).order_by('-date_joined')
     return render(request, 'manager_dashboard.html', {'users': users})
 
 @user_passes_test(lambda u: u.is_authenticated and (u.role in ['manager', 'admin'] or u.is_superuser))
 def manage_user_action(request, user_id, action):
     target_user = get_object_or_404(CustomUser, id=user_id)
     lang = request.session.get('lang', 'en')
+    
     if request.user.role == 'manager' and target_user.role == 'admin':
         messages.error(request, translate_text("Managers cannot edit Admins.", lang))
         return redirect('manager_dashboard')
 
-    actions_map = {
-        'approve': {'attr': 'is_edit_allowed', 'val': True, 'msg': "Edit permission granted."},
-        'archive': {'attr': 'is_archived', 'val': True, 'msg': "User has been archived successfully."},
-        'unarchive': {'attr': 'is_archived', 'val': False, 'msg': "User restored."},
-    }
-
-    if action in actions_map:
-        config = actions_map[action]
-        setattr(target_user, config['attr'], config['val'])
-        if action == 'archive': target_user.is_active = False
-        if action == 'unarchive': target_user.is_active = True
-        
-        target_user.save()
-        messages.success(request, translate_text(config['msg'], lang))
+    # ARCHIVE
+    if action == 'archive':
+        archive_user_action(target_user.id)
+        messages.success(request, translate_text("User archived (Access Disabled).", lang))
+        return redirect('manager_dashboard')
     
-    return redirect('manager_dashboard')
-pass
+    # RESTORE (Unarchive)
+    elif action == 'unarchive':
+        target_user.is_active = True      # Allow login again
+        target_user.is_archived = False   # Remove archive flag
+        target_user.save()
+        messages.success(request, translate_text("User restored successfully.", lang))
+        return redirect('manager_dashboard')
+
+    # APPROVE EDIT
+    elif action == 'approve':
+        target_user.is_edit_allowed = True
+        target_user.save()
+        messages.success(request, translate_text("Edit permission granted.", lang))
+        return redirect('manager_dashboard')
 
 
 def archive_user_action(user_id):
     user = get_object_or_404(CustomUser, id=user_id)
-    employee = Employee.objects.filter(empcode=user.username).first()
     
+    # Still create the snapshot for history
+    employee = Employee.objects.filter(empcode=user.username).first()
     snapshot = {}
     if employee:
-        # Get decrypted name if you implemented the encryption method in models
-        ename_decrypted = employee.get_ename() if hasattr(employee, 'get_ename') else employee.ename
-        
         snapshot = {
+            "name": employee.ename,
             "designation": employee.designation,
             "status": employee.status,
-            "last_updated": str(employee.lastupdate),
-            # Encrypt the name again for the archive specifically
-            "encrypted_name": cipher_suite.encrypt(ename_decrypted.encode()).hex() 
+            "last_updated": str(employee.lastupdate)
         }
 
     ArchivedUser.objects.create(
@@ -414,9 +472,10 @@ def archive_user_action(user_id):
         employee_snapshot=json.dumps(snapshot) 
     )
     
-    if employee:
-        employee.delete() 
-    user.delete()
+    
+    user.is_active = False    # Stops login
+    user.is_archived = True   # Marks as archived
+    user.save()
 
 
 @user_passes_test(lambda u: u.is_superuser)
@@ -559,7 +618,6 @@ class SubmitDraftAPI(APIView):
             status="submitted", lastupdate=timezone.now()
         )
         return Response({"message": f"{count} record(s) submitted"})
-
 @user_passes_test(lambda u: u.role == 'backup_user', login_url='login')
 def download_db_backup(request):
     """Securely serve the SQLite database file."""

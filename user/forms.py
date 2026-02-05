@@ -11,7 +11,7 @@ from captcha.fields import CaptchaField
 class CustomUserCreationForm(UserCreationForm):
     email = forms.EmailField(required=True)
 
-    captcha = CaptchaField()
+    #captcha = CaptchaField()
     consent = forms.BooleanField(
         required=True, 
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
