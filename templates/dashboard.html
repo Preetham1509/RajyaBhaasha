@@ -138,12 +138,11 @@
                                     {% if not user.is_frozen or user.is_edit_allowed %}
                                     <button type="submit" class="btn btn-primary fw-bold py-2">{{ "Save Profile Changes"|t:current_lang }}</button>
                                     {% endif %}
-
                                     {% if not user.is_frozen %}
-<a href="{% url 'freeze_profile' %}" class="btn btn-outline-warning fw-bold py-2"
-    onclick="return confirm('{{ 'Freeze your profile? You will need manager approval to edit it again.'|t:current_lang }}')">
-    {{ "Freeze Profile"|t:current_lang }}
-</a>
+                                    <a href="{% url 'freeze_profile' %}" class="btn btn-outline-warning fw-bold py-2"
+                                        onclick="return confirm('{{ 'Freeze your profile? You will need manager approval to edit it again.'|t:current_lang }}')">
+                                        {{ "Freeze Profile"|t:current_lang }}
+                                    </a>
                                     {% elif not user.is_edit_allowed %}
                                     <a href="{% url 'request_edit' %}" class="btn btn-outline-info fw-bold py-2">
                                         {{ "Request Edit Permission"|t:current_lang }}

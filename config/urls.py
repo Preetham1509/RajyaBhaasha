@@ -38,7 +38,12 @@ urlpatterns = [
 
     # ✅ Single, Clean Employee Form URL
     path("employee-form/", views.employee_form, name="employee_form"),
-
+    path('manager-dashboard/', views.manager_dashboard, name='manager_dashboard'),
+    
+    # ADD THIS NEW LINE:
+    path('update-designation/<int:user_id>/', views.update_designation, name='update_designation'),
+    
+    path('action/<int:user_id>/<str:action>/', views.manage_user_action, name='manage_user_action'),
     # ✅ REST APIs
     path("api/employees/", EmployeeListCreateAPI.as_view(), name="employee_list_create"),
     path("api/employees/<int:pk>/", EmployeeDetailAPI.as_view(), name="employee_detail"),

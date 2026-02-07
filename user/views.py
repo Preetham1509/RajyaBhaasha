@@ -415,39 +415,89 @@ def request_edit(request):
 
 @user_passes_test(lambda u: u.is_authenticated and (u.role in ['manager', 'admin'] or u.is_superuser))
 def manager_dashboard(request):
-    # This includes archived users because they are still in the table
+    # 1. Get all users
     users = CustomUser.objects.all().exclude(pk=request.user.pk).order_by('-date_joined')
+    
+    # 2. Get all employees and map them by empcode (which matches username)
+    # This avoids "N+1 query" performance issues
+    employees = {str(e.empcode): e for e in Employee.objects.all()}
+    
+    # 3. Attach employee object to each user for the template
+    for u in users:
+        u.employee_record = employees.get(u.username)
+
     return render(request, 'manager_dashboard.html', {'users': users})
+
+@user_passes_test(lambda u: u.role in ['manager', 'admin'])
+def update_designation(request, user_id):
+    if request.method == "POST":
+        target_user = get_object_or_404(CustomUser, id=user_id)
+        new_designation = request.POST.get('designation')
+        
+        # Find the employee record
+        employee = Employee.objects.filter(empcode=target_user.username).first()
+        
+        if employee:
+            employee.designation = new_designation
+            employee.save()
+            messages.success(request, f"Designation for {target_user.username} updated to {new_designation}.")
+        else:
+            messages.error(request, "Employee record not found for this user.")
+            
+    return redirect('manager_dashboard')
 
 @user_passes_test(lambda u: u.is_authenticated and (u.role in ['manager', 'admin'] or u.is_superuser))
 def manage_user_action(request, user_id, action):
     target_user = get_object_or_404(CustomUser, id=user_id)
     lang = request.session.get('lang', 'en')
     
+    # 1. Existing Check: Managers cannot edit Admins
     if request.user.role == 'manager' and target_user.role == 'admin':
         messages.error(request, translate_text("Managers cannot edit Admins.", lang))
         return redirect('manager_dashboard')
 
-    # ARCHIVE
+    # ARCHIVE (Admin Only)
     if action == 'archive':
+        if request.user.role == 'manager':
+            messages.error(request, translate_text("Only Admins can archive users.", lang))
+            return redirect('manager_dashboard')
+
         archive_user_action(target_user.id)
         messages.success(request, translate_text("User archived (Access Disabled).", lang))
         return redirect('manager_dashboard')
     
-    # RESTORE (Unarchive)
+    # RESTORE (Admin Only)
     elif action == 'unarchive':
-        target_user.is_active = True      # Allow login again
-        target_user.is_archived = False   # Remove archive flag
+        if request.user.role == 'manager':
+            messages.error(request, translate_text("Only Admins can restore users.", lang))
+            return redirect('manager_dashboard')
+
+        target_user.is_active = True      
+        target_user.is_archived = False   
         target_user.save()
         messages.success(request, translate_text("User restored successfully.", lang))
         return redirect('manager_dashboard')
 
-    # APPROVE EDIT
+    # APPROVE EDIT (Managers & Admins)
     elif action == 'approve':
+        # A. Unlock the User Profile (Email, etc.)
         target_user.is_edit_allowed = True
         target_user.save()
-        messages.success(request, translate_text("Edit permission granted.", lang))
+
+        # B. Unlock the Employee Form (Set status back to Draft)
+        # We assume empcode matches username as per your signup logic
+        employee = Employee.objects.filter(empcode=target_user.username).first()
+        if employee:
+            employee.status = 'draft' # This allows them to edit fields again
+            employee.save()
+            msg = "Edit permission granted & Employee Form unlocked."
+        else:
+            msg = "Edit permission granted (No employee record found)."
+
+        messages.success(request, translate_text(msg, lang))
         return redirect('manager_dashboard')
+
+    return redirect('manager_dashboard')
 
 
 def archive_user_action(user_id):
